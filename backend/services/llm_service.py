@@ -41,33 +41,44 @@ class LLMService:
     
     def extract_questions(self, raw_text: str) -> List[Dict[str, str]]:
         """
-        Parses raw text and uses Gemini to extract structured questions.
+        Parses raw text and uses Gemini to extract structured questions with Part info.
         """
         if not self.api_key:
-            return [{"id": "0", "question": "API Key missing. Please set GEMINI_API_KEY.", "marks": "0", "co": "-", "bl": "-"}]
+            return [{"id": "0", "question": "API Key missing. Please set GEMINI_API_KEY.", "marks": "0", "part": "A", "co": "-", "bl": "-"}]
 
         prompt = f"""
-        Extract all questions from the following text. 
-        For each question, identify:
-        - Question Number (id)
-        - Question Text (question)
-        - Marks (marks)
-        - Course Outcome (CO) e.g., CO1, CO2 (if present, else predict)
-        - Bloom's Level (BL) e.g., L1, L2, L3 (if present, else predict)
+        Extract all questions from the following text extracted from a university question paper.
         
-        Return the result ONLY as a VALID JSON list of objects.
-        Example format:
+        The paper MUST be divided into three parts:
+        - PART-A: Simple, short questions. (Usually Q1-Q10)
+        - PART-B: Analytical questions with choices. (Usually 11-15, often 11(a) OR 11(b)).
+        - PART-C: A single compulsory application-based question (Usually 16).
+        
+        For each question, identify:
+        - Question Number (id): e.g., "1", "11(a)", "11(b)(i)".
+        - Question Text (question): The full text.
+        - Marks (marks): Total marks.
+        - Part (part): "A", "B", or "C".
+        - Course Outcome (CO): e.g., CO1.
+        - Bloom's Level (BL): e.g., L1.
+        
+        Specific Instructions:
+        1. Capture EVERY question.
+        2. For PART-B, if there is an "OR" choice (e.g., 11(a) OR 11(b)), extract BOTH as separate items.
+        
+        Return results ONLY as a VALID JSON list of objects.
+        Example:
         [
-            {{"id": "1", "question": "What is...", "marks": "2", "co": "CO1", "bl": "L1"}}
+            {{"id": "1", "question": "...", "marks": "2", "part": "A", "co": "CO1", "bl": "L1"}},
+            {{"id": "11(a)", "question": "...", "marks": "13", "part": "B", "co": "CO2", "bl": "L3"}}
         ]
 
         Text to process:
-        {raw_text[:3000]}
+        {raw_text}
         """
         
         try:
             response = self.model.generate_content(prompt)
-            # Cleanup json string if extracted with markdown fences
             content = response.text.strip()
             if content.startswith("```json"):
                 content = content[7:-3]
@@ -91,7 +102,7 @@ class LLMService:
         try:
             marks_int = int(marks)
         except:
-            marks_int = 2 # Default to short answer if marks parsing fails
+            marks_int = 2 
 
         if marks_int <= 3:
             length_instruction = "Give a concise, direct answer in 3-5 lines."
@@ -131,7 +142,7 @@ class LLMService:
             Transcribe the handwritten text from this image page. 
             Output ONLY the text content. 
             Maintain the original structure (paragraphs, lists) as much as possible.
-            Do not include any introductory or concluding remarks like "Here is the text".
+            Do not include any introductory or concluding remarks.
             If the image contains diagrams, briefly describe them in [brackets].
             """
             
@@ -140,5 +151,55 @@ class LLMService:
         except Exception as e:
             print(f"Error in transcribe_image: {e}")
             return f"Error transcribing image: {str(e)}"
+
+    def evaluate_answers(self, questions: List[Dict], ideal_answers: Dict[str, str], student_script: str) -> List[Dict]:
+        """
+        Evaluates student answers with strict choice logic and NO HALLUCINATIONS.
+        """
+        if not self.api_key:
+            return []
+
+        prompt = f"""
+        You are an objective and technical examiner for a university. 
+        Evaluate the 'STUDENT ANSWER SCRIPT' against the 'QUESTIONS & IDEAL ANSWERS' provided.
+        
+        ### EVALUATION RULES:
+        1. **MAPPING FIRST**: Before grading, scan the entire student script to locate answers. 
+           - Look for question numbers (1, Q1, etc.) or technical keywords from the question/ideal answer.
+           - Even if the student's numbering is slightly wrong or missing, if the content clearly answers a question, evaluate it.
+        2. **STRICT EVIDENCE FOR MARKS**: Award marks based on the technical correctness found in the script. 
+           - **0 marks**: Only if there is absolutely NO related content in the script for that question.
+           - **Partial/Full marks**: Based on the content provided compared to the ideal answer.
+        3. **PART-B CHOICE LOGIC**: For Part B (Analytical), identify which choice the student has attempted (e.g., 11(a) or 11(b)).
+           - Mark the attempted choice.
+           - Mark the NOT attempted choice as Status: "Alternative Choice Chosen" and 0 marks.
+        4. **NO HALLUCINATION**: Do not imagine content that isn't there. If the script is genuinely blank or unrelated, mark 0.
+        
+        ### QUESTIONS & IDEAL ANSWERS:
+        {json.dumps([{"id": q["id"], "part": q.get("part", "A"), "question": q["question"], "max_marks": q["marks"], "ideal": ideal_answers.get(q["id"], "Evaluate based on general Computer Networks knowledge.")} for q in questions], indent=2)}
+        
+        ### STUDENT ANSWER SCRIPT:
+        {student_script}
+        
+        ### EXPECTED JSON OUTPUT:
+        Return a JSON list of objects:
+        [
+            {{"id": "...", "marks_awarded": "...", "feedback": "...", "status": "Attempted" | "Not Attempted" | "Alternative Choice Chosen"}}
+        ]
+        """
+        
+        try:
+            response = self.model.generate_content(prompt)
+            content = response.text.strip()
+            if content.startswith("```json"):
+                content = content[7:-3]
+            elif content.startswith("```"):
+                content = content[3:-3]
+                
+            evaluation = json.loads(content)
+            return evaluation
+        except Exception as e:
+            print(f"Error in evaluate_answers: {e}")
+            return []
 
 llm_service = LLMService()

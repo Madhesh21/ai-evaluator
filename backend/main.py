@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import upload, generate
+from routers import upload, generate, report
 
 app = FastAPI(title="AI Answer Evaluator")
 
@@ -14,6 +14,7 @@ app.add_middleware(
 
 app.include_router(upload.router, prefix="/api", tags=["Upload"])
 app.include_router(generate.router, prefix="/api", tags=["Generate"])
+app.include_router(report.router, prefix="/api", tags=["Report"])
 
 @app.get("/")
 def read_root():

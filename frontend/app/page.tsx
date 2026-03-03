@@ -118,7 +118,10 @@ export default function Home() {
                 {result.question_paper.extracted_text}
               </pre>
               <div className="mt-4">
-                <ExtractionSection text={result.question_paper.extracted_text} />
+                <ExtractionSection
+                  qpText={result.question_paper.extracted_text}
+                  ansText={result.answer_script.extracted_text}
+                />
               </div>
             </div>
 
@@ -135,10 +138,13 @@ export default function Home() {
 
 import ReactMarkdown from 'react-markdown';
 
-function ExtractionSection({ text }: { text: string }) {
+function ExtractionSection({ qpText, ansText }: { qpText: string, ansText: string }) {
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [evaluationResults, setEvaluationResults] = useState<any[]>([]);
+  const [evaluating, setEvaluating] = useState(false);
 
   const extractQuestions = async () => {
     setLoading(true);
@@ -146,7 +152,7 @@ function ExtractionSection({ text }: { text: string }) {
       const res = await fetch("http://localhost:8000/api/extract-questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: qpText }),
       });
       const data = await res.json();
       setQuestions(data.questions);
@@ -157,15 +163,85 @@ function ExtractionSection({ text }: { text: string }) {
     }
   };
 
+  const handleUpdateAnswer = (id: string, text: string) => {
+    setAnswers(prev => ({ ...prev, [id]: text }));
+  };
+
+  const runEvaluation = async () => {
+    setEvaluating(true);
+    try {
+      const res = await fetch("http://localhost:8000/api/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questions: questions,
+          ideal_answers: answers,
+          answer_script: ansText
+        }),
+      });
+      const data = await res.json();
+      setEvaluationResults(data.evaluation);
+
+      // Scroll to results
+      setTimeout(() => {
+        document.getElementById('results-section')?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setEvaluating(false);
+    }
+  };
+
+  const downloadReport = async () => {
+    try {
+      const res = await fetch("http://localhost:8000/api/generate-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          evaluation_results: evaluationResults,
+          student_name: "Madhesh" // Default name, could be made dynamic
+        }),
+      });
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Evaluation_Report_Madhesh.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) {
+      console.error("Report download failed", e);
+    }
+  };
+
+  const getEvaluationForQuestion = (id: string) => {
+    return evaluationResults.find(r => r.id === id);
+  };
+
   return (
     <div>
-      <button
-        onClick={extractQuestions}
-        disabled={loading}
-        className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-blue-700 disabled:bg-gray-400"
-      >
-        {loading ? "Extracting..." : "Extract Questions (Module 2)"}
-      </button>
+      <div className="flex gap-4">
+        <button
+          onClick={extractQuestions}
+          disabled={loading}
+          className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-blue-700 disabled:bg-gray-400"
+        >
+          {loading ? "Extracting..." : "Extract Questions (Module 2)"}
+        </button>
+
+        {questions.length > 0 && (
+          <button
+            onClick={runEvaluation}
+            disabled={evaluating}
+            className="bg-indigo-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-indigo-700 disabled:bg-gray-400 flex items-center gap-2"
+          >
+            {evaluating ? "Evaluating..." : "🚀 Run Full Evaluation (Module 3)"}
+          </button>
+        )}
+      </div>
 
       {questions.length > 0 && (
         <div className="mt-6 grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
@@ -177,16 +253,132 @@ function ExtractionSection({ text }: { text: string }) {
             >
               <div className="flex justify-between items-start mb-2">
                 <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded">Q{q.id}</span>
-                <span className="text-gray-400 text-xs group-hover:text-blue-500">View Details &rarr;</span>
+                <span className="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded ml-2">Part {q.part}</span>
+                <span className="text-gray-400 text-xs group-hover:text-blue-500 ml-auto">View Details &rarr;</span>
               </div>
               <h5 className="font-semibold text-gray-800 text-sm line-clamp-3 mb-3">{q.question}</h5>
-              <div className="flex gap-2 flex-wrap">
-                <span className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded">Marks: {q.marks}</span>
+              <div className="flex gap-2 flex-wrap mb-2">
+                <span className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded">Max: {q.marks}</span>
                 <span className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded">{q.co}</span>
-                <span className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded">{q.bl}</span>
+              </div>
+
+              <div className="space-y-1">
+                {answers[q.id] && (
+                  <div className="text-[10px] text-blue-600 font-medium flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+                    Ideal Answer Set
+                  </div>
+                )}
+                {getEvaluationForQuestion(q.id) && (
+                  <div className="text-[10px] text-indigo-600 font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+                    Score: {getEvaluationForQuestion(q.id).marks_awarded} / {q.marks}
+                  </div>
+                )}
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Results Section */}
+      {evaluationResults.length > 0 && (
+        <div id="results-section" className="mt-12 pt-8 border-t-2 border-dashed border-gray-200 animate-fade-in-up">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-2xl font-bold text-indigo-900 flex items-center gap-3">
+              <span className="bg-indigo-100 p-2 rounded-lg">📊</span>
+              Evaluation Results
+            </h2>
+            <div className="flex flex-col items-end gap-3">
+              <div className="bg-indigo-600 text-white px-6 py-3 rounded-2xl shadow-lg text-center min-w-[150px]">
+                <div className="text-xs uppercase opacity-80 font-bold tracking-wider">Total Score</div>
+                <div className="text-3xl font-black">
+                  {Math.min(100, evaluationResults.reduce((acc, curr) => acc + (parseFloat(curr.marks_awarded) || 0), 0))}
+                  <span className="text-sm font-normal opacity-70 ml-1">
+                    / 100
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={downloadReport}
+                className="bg-white text-indigo-600 border-2 border-indigo-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-50 transition-colors flex items-center gap-2 shadow-sm"
+              >
+                <span>📥</span> Download PDF Report
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-8">
+            {["A", "B", "C"].map((part) => {
+              const partResults = evaluationResults.filter(res => {
+                const q = questions.find(question => question.id === res.id);
+                return q?.part === part;
+              });
+
+              if (partResults.length === 0) return null;
+
+              return (
+                <div key={part} className="bg-white rounded-2xl shadow-xl border border-indigo-50 overflow-hidden">
+                  <div className="bg-indigo-50 px-6 py-3 border-b border-indigo-100 flex justify-between items-center">
+                    <h3 className="font-bold text-indigo-900 uppercase tracking-widest text-sm">Part {part} Results</h3>
+                    <span className="text-xs font-semibold text-indigo-600 bg-white px-2 py-1 rounded shadow-sm">
+                      {part === 'B' ? 'Choice-based' : 'Compulsory'}
+                    </span>
+                  </div>
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="text-gray-400 border-b border-gray-50">
+                        <th className="p-4 font-bold text-[10px] uppercase tracking-wider w-16">ID</th>
+                        <th className="p-4 font-bold text-[10px] uppercase tracking-wider">Assessment & Feedback</th>
+                        <th className="p-4 font-bold text-[10px] uppercase tracking-wider text-right w-24">Marks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {partResults.map((res) => {
+                        const q = questions.find(q => q.id === res.id);
+                        const marks = parseFloat(res.marks_awarded) || 0;
+                        const maxMarks = q ? parseFloat(q.marks) : 0;
+                        const percentage = maxMarks > 0 ? (marks / maxMarks) * 100 : 0;
+                        const status = res.status || (marks > 0 ? "Attempted" : "Not Attempted");
+
+                        return (
+                          <tr key={res.id} className="hover:bg-gray-50 transition-colors group">
+                            <td className="p-4 align-top">
+                              <span className="inline-block bg-gray-100 text-gray-700 font-bold px-2 py-1 rounded text-[10px]">
+                                {res.id}
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="font-medium text-gray-900 text-sm">
+                                  {q?.question.slice(0, 80)}...
+                                </div>
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase ${status === "Attempted" ? "bg-green-100 text-green-700" :
+                                  status === "Alternative Choice Chosen" ? "bg-blue-100 text-blue-700" :
+                                    "bg-red-100 text-red-700"
+                                  }`}>
+                                  {status}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-500 leading-relaxed italic border-l-2 border-indigo-100 pl-3 py-1">
+                                "{res.feedback}"
+                              </p>
+                            </td>
+                            <td className="p-4 text-right align-top">
+                              <div className={`font-bold text-base ${percentage >= 80 ? 'text-green-600' : percentage >= 40 ? 'text-yellow-600' : 'text-red-500'}`}>
+                                {res.marks_awarded}
+                              </div>
+                              <div className="text-[10px] text-gray-400">/ {q?.marks || '-'}</div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -199,6 +391,7 @@ function ExtractionSection({ text }: { text: string }) {
               <div className="flex items-center gap-3">
                 <span className="bg-blue-600 text-white text-sm font-bold px-3 py-1 rounded-full">Q{selectedQuestion.id}</span>
                 <div className="flex gap-2">
+                  <span className="bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded font-medium">Part: {selectedQuestion.part}</span>
                   <span className="bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded font-medium">Marks: {selectedQuestion.marks}</span>
                   <span className="bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded font-medium">{selectedQuestion.co}</span>
                 </div>
@@ -218,7 +411,12 @@ function ExtractionSection({ text }: { text: string }) {
               <h3 className="text-xl font-bold text-gray-800 mb-6 leading-relaxed">{selectedQuestion.question}</h3>
 
               <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
-                <GenerateAnswerSection question={selectedQuestion.question} marks={selectedQuestion.marks} />
+                <GenerateAnswerSection
+                  question={selectedQuestion.question}
+                  marks={selectedQuestion.marks}
+                  answer={answers[selectedQuestion.id] || ""}
+                  onUpdate={(text) => handleUpdateAnswer(selectedQuestion.id, text)}
+                />
               </div>
             </div>
           </div>
@@ -228,12 +426,23 @@ function ExtractionSection({ text }: { text: string }) {
   );
 }
 
-function GenerateAnswerSection({ question, marks }: { question: string, marks: string }) {
-  const [answer, setAnswer] = useState("");
+function GenerateAnswerSection({
+  question,
+  marks,
+  answer,
+  onUpdate
+}: {
+  question: string,
+  marks: string,
+  answer: string,
+  onUpdate: (val: string) => void
+}) {
   const [loading, setLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(!answer); // Default to edit mode if empty
 
   const generate = async () => {
     setLoading(true);
+    setIsEditing(true); // Switch to edit mode to see the result being typed
     try {
       const res = await fetch("http://localhost:8000/api/generate-answers", {
         method: "POST",
@@ -241,7 +450,7 @@ function GenerateAnswerSection({ question, marks }: { question: string, marks: s
         body: JSON.stringify({ text: question, marks }),
       });
       const data = await res.json();
-      setAnswer(data.ideal_answer);
+      onUpdate(data.ideal_answer);
     } catch (e) {
       console.error(e);
     } finally {
@@ -252,37 +461,52 @@ function GenerateAnswerSection({ question, marks }: { question: string, marks: s
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
-        <h4 className="font-bold text-gray-700">Ideal Answer</h4>
-        {!answer && (
+        <h4 className="font-bold text-gray-700">Answer Key (Ideal Answer)</h4>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setIsEditing(!isEditing)}
+            className={`text-xs px-3 py-1.5 rounded border transition-colors ${isEditing
+              ? "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+              : "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+              }`}
+          >
+            {isEditing ? "👁 Preview Markdown" : "✎ Edit Answer"}
+          </button>
+
           <button
             onClick={generate}
             disabled={loading}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50"
+            className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50"
           >
-            {loading ? (
-              <>
-                <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Generating...
-              </>
-            ) : "Generate Answer with AI"}
+            {loading ? "Generating..." : "✨ AI Generate"}
           </button>
-        )}
+        </div>
       </div>
 
-      {answer && (
-        <div className="prose prose-blue max-w-none">
-          <ReactMarkdown>{answer}</ReactMarkdown>
+      {isEditing ? (
+        <textarea
+          value={answer}
+          onChange={(e) => onUpdate(e.target.value)}
+          className="w-full h-64 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm bg-white"
+          placeholder="Enter the ideal answer here, or click 'AI Generate'..."
+        />
+      ) : (
+        <div className="bg-white p-6 rounded-lg border border-gray-200 min-h-[16rem]">
+          {answer ? (
+            <div className="prose prose-blue max-w-none">
+              <ReactMarkdown>{answer}</ReactMarkdown>
+            </div>
+          ) : (
+            <div className="text-gray-400 text-sm italic text-center py-20">
+              No answer defined yet. Switch to Edit mode to write one or generate with AI.
+            </div>
+          )}
         </div>
       )}
 
-      {!answer && !loading && (
-        <div className="text-gray-400 text-sm italic text-center py-8">
-          Click the button above to generate a model answer using Gemini AI.
-        </div>
-      )}
+      <p className="mt-2 text-xs text-gray-400 text-right">
+        {isEditing ? "Supports Markdown formatting." : "Reviewing formatted answer."}
+      </p>
     </div>
   );
 }

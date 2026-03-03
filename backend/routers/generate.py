@@ -26,3 +26,19 @@ async def generate_answers(payload: GeneratePayload):
         return {"ideal_answer": answer}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+class EvaluatePayload(BaseModel):
+    questions: list
+    ideal_answers: dict
+    answer_script: str
+
+@router.post("/evaluate")
+async def evaluate_answers(payload: EvaluatePayload):
+    try:
+        evaluation = llm_service.evaluate_answers(
+            payload.questions, 
+            payload.ideal_answers, 
+            payload.answer_script
+        )
+        return {"evaluation": evaluation}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
