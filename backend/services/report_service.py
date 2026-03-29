@@ -48,52 +48,32 @@ class ReportService:
         pdf.set_font("Arial", 'B', 12)
         pdf.cell(0, 10, "Detailed Breakdown", ln=True)
         
-        # Table Header
-        pdf.set_fill_color(232, 234, 246) # Indigo 50
         pdf.set_font("Arial", 'B', 10)
-        pdf.cell(15, 10, "ID", 1, 0, 'C', True)
-        pdf.cell(110, 10, "Feedback", 1, 0, 'C', True)
-        pdf.cell(30, 10, "Status", 1, 0, 'C', True)
-        pdf.cell(35, 10, "Marks", 1, 1, 'C', True)
-        
-        # Table Rows
-        pdf.set_font("Arial", '', 9)
-        for res in evaluation_results:
-            # Multi-line feedback handling
-            feedback = res.get("feedback", "No feedback provided.")
-            status = res.get("status", "N/A")
-            marks = res.get("marks_awarded", "0")
-            qid = res.get("id", "-")
+        with pdf.table(
+            col_widths=(15, 110, 30, 35),
+            text_align=("CENTER", "LEFT", "CENTER", "CENTER"),
+            line_height=8
+        ) as table:
+            # Table Header
+            row = table.row()
+            row.cell("ID")
+            row.cell("Feedback", align="CENTER")
+            row.cell("Status")
+            row.cell("Marks")
             
-            # Use multi_cell for feedback to wrap text
-            old_x = pdf.get_x()
-            old_y = pdf.get_y()
-            
-            # Find height needed for feedback cell
-            pdf.set_xy(old_x + 15, old_y)
-            feedback_height = pdf.get_string_width(feedback) / 110 # Estimation
-            # Actually fpdf does this better with multi_cell
-            
-            # Start row
-            h = 10 # Default height
-            
-            pdf.cell(15, h, qid, 1, 0, 'C')
-            
-            # Feedback Cell (wrapped)
-            curr_x = pdf.get_x()
-            curr_y = pdf.get_y()
-            pdf.multi_cell(110, 5, feedback, 1, 'L')
-            new_y = pdf.get_y()
-            h = new_y - curr_y
-            if h < 10: h = 10 # Ensure min height
-            
-            # Go back and finish other cells for this row if multi_cell changed position
-            pdf.set_xy(curr_x + 110, curr_y)
-            pdf.cell(30, h, status, 1, 0, 'C')
-            pdf.cell(35, h, str(marks), 1, 1, 'C')
-            
-            # Ensure next row starts at the correct Y
-            pdf.set_y(new_y if new_y > curr_y + h else curr_y + h)
+            # Table Rows
+            pdf.set_font("Arial", '', 9)
+            for res in evaluation_results:
+                feedback = str(res.get("feedback", "No feedback provided."))
+                status = str(res.get("status", "N/A"))
+                marks = str(res.get("marks_awarded", "0"))
+                qid = str(res.get("id", "-"))
+                
+                row = table.row()
+                row.cell(qid)
+                row.cell(feedback)
+                row.cell(status)
+                row.cell(marks)
 
         # Footer
         pdf.set_y(-30)
@@ -102,6 +82,6 @@ class ReportService:
         pdf.cell(0, 10, "This is an AI-generated assessment report. Please verify with official university records.", align='C', ln=True)
         pdf.cell(0, 10, f"Page {pdf.page_no()}", align='C')
         
-        return pdf.output()
+        return bytes(pdf.output())
 
 report_service = ReportService()

@@ -204,16 +204,16 @@ function ExtractionSection({ qpText, ansText }: { qpText: string, ansText: strin
         }),
       });
 
+      if (!res.ok) {
+        throw new Error(`Failed to generate report: ${res.statusText}`);
+      }
+
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Evaluation_Report_Madhesh.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      window.open(url, '_blank');
     } catch (e) {
-      console.error("Report download failed", e);
+      console.error("Report generation/view failed", e);
+      alert("Failed to generate and open report.");
     }
   };
 

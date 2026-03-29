@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Optional
 from services.report_service import report_service
 
-router = APIRouter(prefix="/api", tags=["report"])
+router = APIRouter(tags=["report"])
 
 class ReportPayload(BaseModel):
     evaluation_results: List[Dict]
@@ -22,7 +22,7 @@ async def generate_report(payload: ReportPayload):
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f"attachment; filename=Evaluation_Report_{payload.student_name.replace(' ', '_')}.pdf"
+                "Content-Disposition": f"inline; filename=Evaluation_Report_{payload.student_name.replace(' ', '_')}.pdf"
             }
         )
     except Exception as e:
