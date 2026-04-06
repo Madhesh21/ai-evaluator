@@ -154,10 +154,16 @@ function ExtractionSection({ qpText, ansText }: { qpText: string, ansText: strin
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: qpText }),
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Failed to extract questions: ${errData.detail || res.statusText}`);
+        return;
+      }
       const data = await res.json();
-      setQuestions(data.questions);
+      setQuestions(data.questions || []);
     } catch (e) {
       console.error(e);
+      alert("Error extracting questions.");
     } finally {
       setLoading(false);
     }
@@ -179,8 +185,13 @@ function ExtractionSection({ qpText, ansText }: { qpText: string, ansText: strin
           answer_script: ansText
         }),
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Evaluation failed: ${errData.detail || res.statusText}`);
+        return;
+      }
       const data = await res.json();
-      setEvaluationResults(data.evaluation);
+      setEvaluationResults(data.evaluation || []);
 
       // Scroll to results
       setTimeout(() => {
@@ -188,6 +199,7 @@ function ExtractionSection({ qpText, ansText }: { qpText: string, ansText: strin
       }, 100);
     } catch (e) {
       console.error(e);
+      alert("Error running evaluation.");
     } finally {
       setEvaluating(false);
     }
@@ -449,10 +461,16 @@ function GenerateAnswerSection({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: question, marks }),
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Generation failed: ${errData.detail || res.statusText}`);
+        return;
+      }
       const data = await res.json();
-      onUpdate(data.ideal_answer);
+      onUpdate(data.ideal_answer || "");
     } catch (e) {
       console.error(e);
+      alert("Error generating answer.");
     } finally {
       setLoading(false);
     }

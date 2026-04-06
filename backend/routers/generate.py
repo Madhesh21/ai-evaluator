@@ -9,7 +9,7 @@ class GeneratePayload(BaseModel):
     marks: str = "2" # Default to 2 marks
 
 @router.post("/extract-questions")
-async def extract_questions(payload: GeneratePayload):
+def extract_questions(payload: GeneratePayload):
     try:
         questions = llm_service.extract_questions(payload.text)
         return {"questions": questions}
@@ -17,7 +17,7 @@ async def extract_questions(payload: GeneratePayload):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/generate-answers")
-async def generate_answers(payload: GeneratePayload):
+def generate_answers(payload: GeneratePayload):
     """
     Expects text (Question) and marks.
     """
@@ -32,7 +32,7 @@ class EvaluatePayload(BaseModel):
     answer_script: str
 
 @router.post("/evaluate")
-async def evaluate_answers(payload: EvaluatePayload):
+def evaluate_answers(payload: EvaluatePayload):
     try:
         evaluation = llm_service.evaluate_answers(
             payload.questions, 

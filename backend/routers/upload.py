@@ -4,12 +4,12 @@ from services.ocr_service import ocr_service
 router = APIRouter()
 
 @router.post("/process-document")
-async def process_document(file: UploadFile = File(...), doc_type: str = "question_paper"):
+def process_document(file: UploadFile = File(...), doc_type: str = "question_paper"):
     """
     Upload and process a document (Question Paper or Answer Script).
     doc_type: 'question_paper' or 'answer_script'
     """
-    contents = await file.read()
+    contents = file.file.read()
     
     try:
         if file.content_type == "application/pdf":

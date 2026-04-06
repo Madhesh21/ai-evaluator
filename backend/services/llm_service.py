@@ -4,11 +4,33 @@ import google.generativeai as genai
 import PIL.Image
 import io
 from typing import List, Dict
+import time
+import re
 from dotenv import load_dotenv
 
 load_dotenv()
 
 class LLMService:
+    def _call_gemini_with_retry(self, prompt_or_parts, max_retries=3):
+        for attempt in range(max_retries):
+            try:
+                return self.model.generate_content(prompt_or_parts)
+            except Exception as e:
+                error_str = str(e)
+                if "429" in error_str or "Quota" in error_str or "Exhausted" in error_str:
+                    print(f"Rate limit hit. Attempt {attempt + 1}/{max_retries}.")
+                    delay = 30 # Default delay
+                    match = re.search(r"retry in (\d+\.?\d*)s", error_str)
+                    if match:
+                        delay = float(match.group(1)) + 1
+                    
+                    if attempt < max_retries - 1:
+                        print(f"Sleeping for {delay} seconds before retrying...")
+                        time.sleep(delay)
+                        continue
+                print(f"Error calling Gemini: {e}")
+                raise e
+
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
         if not self.api_key:
@@ -21,15 +43,15 @@ class LLMService:
                 available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
                 print(f"Available Gemini Models: {available_models}")
                 
-                # Priority list
-                if 'models/gemini-1.5-flash' in available_models:
-                    self.model_name = 'models/gemini-1.5-flash'
-                elif 'models/gemini-1.5-flash-001' in available_models:
-                    self.model_name = 'models/gemini-1.5-flash-001'
-                elif 'models/gemini-pro' in available_models:
-                    self.model_name = 'models/gemini-pro'
+                # Priority list: avoiding models with 0 or 20 quota limits
+                if 'models/gemini-flash-latest' in available_models:
+                    self.model_name = 'models/gemini-flash-latest'
+                elif 'models/gemini-2.5-flash-lite' in available_models:
+                    self.model_name = 'models/gemini-2.5-flash-lite'
+                elif 'models/gemini-pro-latest' in available_models:
+                    self.model_name = 'models/gemini-pro-latest'
                 elif available_models:
-                    self.model_name = available_models[0]
+                    self.model_name = available_models[-1] # Try last
                 else:
                     self.model_name = 'gemini-1.5-flash' # Fallback default
                 
@@ -78,7 +100,7 @@ class LLMService:
         """
         
         try:
-            response = self.model.generate_content(prompt)
+            response = self._call_gemini_with_retry(prompt)
             content = response.text.strip()
             if content.startswith("```json"):
                 content = content[7:-3]
@@ -89,7 +111,7 @@ class LLMService:
             return questions
         except Exception as e:
             print(f"Error in extract_questions: {e}")
-            return []
+            raise Exception(f"Failed to extract questions: {str(e)}")
 
     def generate_ideal_answer(self, question: str, marks: str = "2", context: str = "") -> str:
         """
@@ -123,10 +145,10 @@ class LLMService:
         """
         
         try:
-            response = self.model.generate_content(prompt)
+            response = self._call_gemini_with_retry(prompt)
             return response.text.strip()
         except Exception as e:
-            return f"Error generating answer: {str(e)}"
+            raise Exception(f"Failed to generate answer: {str(e)}")
 
     def transcribe_image(self, image_bytes: bytes) -> str:
         """
@@ -146,11 +168,11 @@ class LLMService:
             If the image contains diagrams, briefly describe them in [brackets].
             """
             
-            response = self.model.generate_content([prompt, image])
+            response = self._call_gemini_with_retry([prompt, image])
             return response.text.strip()
         except Exception as e:
             print(f"Error in transcribe_image: {e}")
-            return f"Error transcribing image: {str(e)}"
+            raise Exception(f"Failed to transcribe image: {str(e)}")
 
     def evaluate_answers(self, questions: List[Dict], ideal_answers: Dict[str, str], student_script: str) -> List[Dict]:
         """
@@ -189,7 +211,7 @@ class LLMService:
         """
         
         try:
-            response = self.model.generate_content(prompt)
+            response = self._call_gemini_with_retry(prompt)
             content = response.text.strip()
             if content.startswith("```json"):
                 content = content[7:-3]
@@ -200,6 +222,6 @@ class LLMService:
             return evaluation
         except Exception as e:
             print(f"Error in evaluate_answers: {e}")
-            return []
+            raise Exception(f"Failed to evaluate answers: {str(e)}")
 
 llm_service = LLMService()
