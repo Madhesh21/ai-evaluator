@@ -38,7 +38,6 @@ class LLMService:
         else:
             genai.configure(api_key=self.api_key)
             
-            # Robust model selection
             try:
                 available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
                 print(f"Available Gemini Models: {available_models}")
@@ -46,7 +45,7 @@ class LLMService:
                 # Priority list: avoiding models with 0 or 20 quota limits
                 if 'models/gemini-flash-latest' in available_models:
                     self.model_name = 'models/gemini-flash-latest'
-                elif 'models/gemini-2.5-flash-lite' in available_models:
+                elif 'models/gemini-2.5-lite' in available_models:
                     self.model_name = 'models/gemini-2.5-flash-lite'
                 elif 'models/gemini-pro-latest' in available_models:
                     self.model_name = 'models/gemini-pro-latest'

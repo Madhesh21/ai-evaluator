@@ -10,11 +10,6 @@ class OCRService:
         pass
 
     def extract_text_from_pdf(self, file_bytes: bytes) -> str:
-        """
-        Extracts text from a PDF file using a hybrid approach:
-        1. Tries digital text extraction first (fast).
-        2. Falls back to Gemini Vision if digital extraction yields little/no text (slow but accurate).
-        """
         text = ""
         try:
             with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
@@ -47,9 +42,9 @@ class OCRService:
             return f"Error during PDF extraction: {str(e)}"
 
     def extract_text_from_image(self, file_bytes: bytes) -> str:
-        """
-        Extracts text from an image using Gemini Vision (LLMService).
-        """
+    
+        #Extracts text from an image using Gemini Vision (LLMService).
+    
         return llm_service.transcribe_image(file_bytes)
 
 ocr_service = OCRService()
